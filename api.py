@@ -3,10 +3,15 @@
 # Expõe os dados do Supabase para o React
 # ==========================================
 
+import threading
+from mqtt_handler import iniciar_mqtt
+from ia_scheduler import iniciar_ia
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from db import supabase
 from datetime import datetime, timedelta
+
 
 app = FastAPI(title="API Monitoramento de Água", version="1.0")
 
@@ -109,6 +114,15 @@ def get_previsao():
 def executar_ia():
     from ia import analisar_leituras
     return analisar_leituras()
+
+
+# Inicia o assinante MQTT em background
+threading.Thread(target=iniciar_mqtt, daemon=True).start()
+print("[API] Assinante MQTT iniciado em background")
+
+# Inicia o agendador da IA em background
+threading.Thread(target=iniciar_ia, daemon=True).start()
+print("[API] Agendador da IA iniciado em background")
 
 if __name__ == "__main__":
     import uvicorn
