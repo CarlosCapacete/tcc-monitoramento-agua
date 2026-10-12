@@ -1,0 +1,15 @@
+# Ambiente
+.env
+venv/
+_pycache_/
+*.pyc
+
+# Dados locais
+dados_agua.csv
+
+# Arduino
+sketch_*/
+
+# Sistema
+.DS_Store
+Thumbs.db
