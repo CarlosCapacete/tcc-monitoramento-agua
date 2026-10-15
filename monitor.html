@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor de Água - Tempo Real</title>
+    <style>
+        body { font-family: Arial; background: #0a1128; color: #fff; padding: 20px; margin: 0; }
+        h1 { color: #00d4ff; text-align: center; }
+        .dado { background: #1a2a6c; padding: 15px; margin: 10px 0; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; }
+        .pulsos { font-size: 1.5em; font-weight: bold; color: #00ffea; }
+        .timestamp { font-size: 0.8em; color: #aaa; }
+        .status { text-align: center; padding: 10px; border-radius: 5px; margin-bottom: 20px; font-weight: bold; }
+        .online { background: #00aa00; }
+        .offline { background: #aa0000; }
+    </style>
+</head>
+<body>
+    <h1>💧 Monitor de Água</h1>
+    <div id="status" class="status offline">Conectando ao Supabase...</div>
+    <div id="dados"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const SUPABASE_URL = 'https://zhtxnbmsjutmszpowmdw.supabase.co';
+        // ⚠️ COLE A SUA CHAVE ANON AQUI EMBAIXO, DENTRO DAS ASPAS SIMPLES:
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpodHhuYm1zanV0bXN6cG93bWR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTE3Mjk1MDEsImV4cCI6MjEwNzMwNTUwMX0._GFYNuTY5kx3awjdECQnjoB6GGffylGxFbfya3h_79c';
+
+        const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const statusDiv = document.getElementById('status');
+        const dadosDiv = document.getElementById('dados');
+
+        // Busca os últimos 10 dados ao carregar
+        async function carregarIniciais() {
+            const { data, error } = await supabaseClient
+                .from('leituras')
+                .select('*')
+                .order('timestamp', { ascending: false })
+                .limit(10);
+            
+            if (error) {
+                statusDiv.textContent = 'Erro: ' + error.message;
+                statusDiv.className = 'status offline';
+                return;
+            }
+            
+            statusDiv.textContent = '✅ Conectado! Aguardando dados...';
+            statusDiv.className = 'status online';
+            dadosDiv.innerHTML = '';
+            data.forEach(adicionarDado);
+        }
+
+        function adicionarDado(leitura) {
+            const item = document.createElement('div');
+            item.className = 'dado';
+            item.innerHTML = `
+                <span class="pulsos">${leitura.pulsos} pulsos</span>
+                <span class="timestamp">${leitura.timestamp}</span>
+            `;
+            dadosDiv.prepend(item);
+            // Mantém só os 20 últimos
+            if (dadosDiv.children.length > 20) {
+                dadosDiv.removeChild(dadosDiv.lastChild);
+            }
+        }
+
+        // Escuta novos dados em tempo real
+        supabaseClient
+            .channel('leituras-realtime')
+            .on('postgres_changes', 
+                { event: 'INSERT', schema: 'public', table: 'leituras' }, 
+                (payload) => {
+                    adicionarDado(payload.new);
+                }
+            )
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('Inscrito no Realtime!');
+                }
+            });
+
+        carregarIniciais();
+    </script>
+</body>
+</html>
