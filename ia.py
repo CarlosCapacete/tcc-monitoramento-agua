@@ -248,7 +248,7 @@ def analisar_leituras():
 
 
 # ---------- 7. EXECUÇÃO DIRETA (para testes) ----------
-if _name_ == "_main_":
+if __name__ == "__main__":
     resultado = analisar_leituras()
     print(f"Alertas gerados: {resultado.get('total_alertas', 0)}")
     for a in resultado.get("alertas", []):
