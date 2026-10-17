@@ -487,6 +487,39 @@ def get_lista_dias():
     
     return {"dados": lista_final}
 
+@app.get("/api/lista/meses")
+def get_lista_meses():
+    """
+    Retorna o consumo de CADA MÊS do ano atual.
+    Ideal para gráfico de evolução anual.
+    """
+    from datetime import datetime
+    agora = datetime.utcnow()
+    
+    # Pega desde o dia 1 de Janeiro do ano atual
+    inicio_do_ano = agora.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    resposta = supabase.table("leituras")\
+        .select("pulsos, timestamp")\
+        .gte("timestamp", inicio_do_ano.isoformat())\
+        .execute()
+
+    # Cria os meses do ano até o mês atual (ex: "01/2026", "02/2026"...)
+    meses_dict = {f"{i:02d}/{agora.year}": 0 for i in range(1, agora.month + 1)}
+
+    # Agrupa os dados reais
+    for l in resposta.data:
+        mes_str = l["timestamp"][5:7] # Pega o "10" de "2026-10-17"
+        chave = f"{mes_str}/{agora.year}"
+        
+        if chave in meses_dict:
+            meses_dict[chave] += l["pulsos"]
+
+    # Converte para lista
+    lista_final = [{"mes": mes, "pulsos": pulsos} for mes, pulsos in sorted(meses_dict.items())]
+    
+    return {"dados": lista_final}
+
 
 if __name__ == "__main__":
     import uvicorn
