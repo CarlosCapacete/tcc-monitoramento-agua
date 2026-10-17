@@ -425,6 +425,68 @@ print("[API] Assinante MQTT iniciado em background")
 threading.Thread(target=iniciar_ia, daemon=True).start()
 print("[API] Agendador da IA iniciado em background")
 
+# =====================================================
+# ROTAS DE LISTAS INDIVIDUAIS (PARA GRÁFICOS)
+# =====================================================
+
+@app.get("/api/lista/horas")
+def get_lista_horas():
+    """
+    Retorna o consumo de CADA HORA do dia atual.
+    Ideal para gráfico de barras de 24 horas.
+    """
+    from datetime import datetime
+    agora = datetime.utcnow()
+    inicio_do_dia = agora.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    resposta = supabase.table("leituras")\
+        .select("pulsos, timestamp")\
+        .gte("timestamp", inicio_do_dia.isoformat())\
+        .execute()
+
+    # Inicializa todas as 24 horas com 0
+    horas_dict = {f"{i:02d}:00": 0 for i in range(24)}
+
+    # Agrupa os dados reais
+    for l in resposta.data:
+        # Pega a hora do timestamp (ex: "13")
+        hora_str = l["timestamp"][11:13] 
+        chave = f"{hora_str}:00"
+        if chave in horas_dict:
+            horas_dict[chave] += l["pulsos"]
+
+    # Converte para lista (formato que o React adora)
+    lista_final = [{"hora": hora, "pulsos": pulsos} for hora, pulsos in horas_dict.items()]
+    
+    return {"dados": lista_final}
+
+
+@app.get("/api/lista/dias")
+def get_lista_dias():
+    """
+    Retorna o consumo de CADA DIA do mês atual.
+    Ideal para gráfico de linha de acompanhamento diário.
+    """
+    from datetime import datetime
+    agora = datetime.utcnow()
+    inicio_do_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    resposta = supabase.table("leituras")\
+        .select("pulsos, timestamp")\
+        .gte("timestamp", inicio_do_mes.isoformat())\
+        .execute()
+
+    # Agrupa por dia (YYYY-MM-DD)
+    dias_dict = {}
+    for l in resposta.data:
+        data_str = l["timestamp"][:10] # Pega "2026-10-17"
+        dias_dict[data_str] = dias_dict.get(data_str, 0) + l["pulsos"]
+
+    # Ordena do dia 1 até o dia atual
+    lista_final = [{"data": data, "pulsos": pulsos} for data, pulsos in sorted(dias_dict.items())]
+    
+    return {"dados": lista_final}
+
 
 if __name__ == "__main__":
     import uvicorn
