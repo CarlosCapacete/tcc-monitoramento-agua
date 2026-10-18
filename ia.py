@@ -241,7 +241,8 @@ def analisar_leituras():
             continue
 
         nomes_dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
-        classificacao["mensagem"] = f"{classificacao['mensagem']}: {pulsos} pulsos em {nomes_dias[dia_semana]}, {dia:02d}/{mes:02d}/{ano} às {hora}h."
+        litros_convertidos = round(pulsos / 450, 2)
+        classificacao["mensagem"] = f"{classificacao['mensagem']}: {litros_convertidos} litros em {nomes_dias[dia_semana]}, {dia:02d}/{mes:02d}/{ano} às {hora}h."
         classificacao["timestamp"] = timestamp_str
 
         alertas_gerados.append(classificacao)
