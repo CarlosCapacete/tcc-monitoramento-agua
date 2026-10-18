@@ -520,6 +520,107 @@ def get_lista_meses():
     
     return {"dados": lista_final}
 
+@app.get("/api/lista/horas")
+def get_lista_horas():
+    """
+    Retorna o consumo de CADA HORA do dia atual (em pulsos e litros).
+    """
+    from datetime import datetime
+    agora = datetime.utcnow()
+    inicio_do_dia = agora.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    resposta = supabase.table("leituras")\
+        .select("pulsos, timestamp")\
+        .gte("timestamp", inicio_do_dia.isoformat())\
+        .execute()
+
+    horas_dict = {f"{i:02d}:00": 0 for i in range(24)}
+
+    for l in resposta.data:
+        hora_str = l["timestamp"][11:13]
+        chave = f"{hora_str}:00"
+        if chave in horas_dict:
+            horas_dict[chave] += l["pulsos"]
+
+    # --- CONVERSÃO PARA LITROS ---
+    lista_final = [
+        {
+            "hora": hora,
+            "pulsos": pulsos,
+            "litros": round(pulsos / PULSOS_POR_LITRO, 2)  # <-- AQUI!
+        }
+        for hora, pulsos in horas_dict.items()
+    ]
+
+    return {"dados": lista_final}
+
+
+@app.get("/api/lista/dias")
+def get_lista_dias():
+    """
+    Retorna o consumo de CADA DIA do mês atual (em pulsos e litros).
+    """
+    from datetime import datetime
+    agora = datetime.utcnow()
+    inicio_do_mes = agora.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    resposta = supabase.table("leituras")\
+        .select("pulsos, timestamp")\
+        .gte("timestamp", inicio_do_mes.isoformat())\
+        .execute()
+
+    dias_dict = {}
+    for l in resposta.data:
+        data_str = l["timestamp"][:10]
+        dias_dict[data_str] = dias_dict.get(data_str, 0) + l["pulsos"]
+
+    # --- CONVERSÃO PARA LITROS ---
+    lista_final = [
+        {
+            "data": data,
+            "pulsos": pulsos,
+            "litros": round(pulsos / PULSOS_POR_LITRO, 2)  # <-- AQUI!
+        }
+        for data, pulsos in sorted(dias_dict.items())
+    ]
+
+    return {"dados": lista_final}
+
+
+@app.get("/api/lista/meses")
+def get_lista_meses():
+    """
+    Retorna o consumo de CADA MÊS do ano atual (em pulsos e litros).
+    """
+    from datetime import datetime
+    agora = datetime.utcnow()
+    inicio_do_ano = agora.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    resposta = supabase.table("leituras")\
+        .select("pulsos, timestamp")\
+        .gte("timestamp", inicio_do_ano.isoformat())\
+        .execute()
+
+    meses_dict = {f"{i:02d}/{agora.year}": 0 for i in range(1, agora.month + 1)}
+
+    for l in resposta.data:
+        mes_str = l["timestamp"][5:7]
+        chave = f"{mes_str}/{agora.year}"
+        if chave in meses_dict:
+            meses_dict[chave] += l["pulsos"]
+
+    # --- CONVERSÃO PARA LITROS ---
+    lista_final = [
+        {
+            "mes": mes,
+            "pulsos": pulsos,
+            "litros": round(pulsos / PULSOS_POR_LITRO, 2)  # <-- AQUI!
+        }
+        for mes, pulsos in sorted(meses_dict.items())
+    ]
+
+    return {"dados": lista_final}
+
 
 if __name__ == "__main__":
     import uvicorn
