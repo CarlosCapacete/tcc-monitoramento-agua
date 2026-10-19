@@ -75,13 +75,13 @@ def get_ultimos(quantidade: int = 10):
 
 @app.get("/api/alertas")
 def get_alertas():
+    import re
     resposta = supabase.table("alertas").select("*").order("timestamp", desc=True).limit(20).execute()
     
     alertas_limpos = []
     for a in resposta.data:
-        # Extrai o número que está dentro da string da mensagem
-        import re
-        match = re.search(r'de ([\d.]+)', a["mensagem"])
+        # Agora ele procura o número que vem logo depois dos dois pontos (:)
+        match = re.search(r': ([\d.]+)', a["mensagem"])
         valor_numerico = float(match.group(1)) if match else 0.0
         
         alertas_limpos.append({
@@ -89,11 +89,12 @@ def get_alertas():
             "timestamp": a["timestamp"],
             "tipo": a["tipo"],
             "mensagem": a["mensagem"], 
-            "pulsos": valor_numerico, # <-- AQUI! Ele recebe o valor em litros na chave "pulsos"
+            "pulsos": valor_numerico,
             "gravidade": a["gravidade"]
         })
         
     return {"alertas": alertas_limpos}
+
 @app.post("/api/ia/analisar")
 def executar_ia():
     from ia import analisar_leituras
