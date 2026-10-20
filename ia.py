@@ -5,10 +5,11 @@
 
 import pandas as pd
 import numpy as np
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sklearn.ensemble import IsolationForest
 from sklearn.linear_model import LinearRegression
 from db import supabase
+
 
 
 # =====================================================
@@ -195,23 +196,50 @@ def prever_consumo_mensal():
 
 # ---------- 6. FUNÇÃO PRINCIPAL ----------
 def analisar_leituras():
+    # Pega as últimas 100 leituras do banco
     resposta = supabase.table("leituras").select("*").order("timestamp", desc=True).limit(100).execute()
     leituras = resposta.data
+    if not leituras: return {"erro": "Sem dados"}
 
-    if not leituras:
-        return {"erro": "Sem dados"}
+  #agr pega vazao continua tbm
 
+    agora = datetime.now(timezone.utc)
+    ha_10_minutos = agora - timedelta(minutes=10)
+    
+    # Puxa as leituras dos últimos 30 minutos
+    res_continuo = supabase.table("leituras").select("pulsos")\
+        .gte("timestamp", ha_10_minutos.isoformat()).execute()
+    
+    # Se tivermos pelo menos 20 registros no período (para garantir que o sensor tá ligado)
+    if len(res_continuo.data) > 60: 
+        pulsos_continuos = [l["pulsos"] for l in res_continuo.data]
+        
+        # Verifica se TODAS as leituras foram maiores que zero e menores que 300
+        if all(0 < p < 300 for p in pulsos_continuos):
+            alerta_vazamento = {
+                "tipo": "vazamento_continuo",
+                "mensagem": "Possível vazamento contínuo: fluxo de baixa intensidade detectado por mais de 30 minutos sem parar.",
+                "gravidade": "alta",
+                "timestamp": agora.isoformat()
+            }
+            
+            # Verifica se esse alerta já não foi gerado nos últimos 15 minutos (anti-spam)
+            res_ultimo_alerta = supabase.table("alertas").select("id")\
+                .eq("tipo", "vazamento_continuo")\
+                .gte("timestamp", (agora - timedelta(minutes=15)).isoformat()).execute()
+            
+            if not res_ultimo_alerta.data:
+                supabase.table("alertas").insert(alerta_vazamento).execute()
+                print("[IA] Alerta de vazamento contínuo gerado!")
+
+    # =====================================================
+    # ANÁLISE DO MACHINE LEARNING (Isolation Forest)
+    # =====================================================
     modelo, df_historico = treinar_modelo_anomalias()
+    if modelo is None: return {"erro": "Modelo não treinado"}
 
-    if modelo is None:
-        return {"erro": "Modelo não pôde ser treinado"}
-
-    # Mapa de média móvel com timestamp NORMALIZADO
     df_historico["timestamp_norm"] = df_historico["timestamp"].apply(normalizar_timestamp)
     mapa_media_movel = dict(zip(df_historico["timestamp_norm"], df_historico["media_movel"]))
-
-    pulsos_recentes = [l["pulsos"] for l in leituras[:10]]
-    media_movel_fallback = sum(pulsos_recentes) / len(pulsos_recentes) if pulsos_recentes else 0
 
     alertas_gerados = []
 
@@ -221,33 +249,31 @@ def analisar_leituras():
 
         try:
             dt = pd.to_datetime(timestamp_str, format='ISO8601', utc=True)
-            hora = dt.hour
-            dia = dt.day
-            dia_semana = dt.dayofweek
-            mes = dt.month
-            ano = dt.year
+            hora, dia, dia_semana, mes, ano = dt.hour, dt.day, dt.dayofweek, dt.month, dt.year
         except Exception:
             continue
 
-        # Busca a média móvel usando o timestamp normalizado
         ts_norm = normalizar_timestamp(timestamp_str)
-        media_movel = mapa_media_movel.get(ts_norm, media_movel_fallback)
+        media_movel = mapa_media_movel.get(ts_norm, 0)
 
+        # 1. ML é o Porteiro: Só passa se for anômalo
         if not detectar_anomalia_ml(modelo, hora, dia, dia_semana, mes, ano, pulsos, media_movel):
             continue
 
+        # 2. Regra classifica a gravidade
         classificacao = classificar_gravidade(hora, pulsos)
-        if classificacao is None:
-            continue
+        if classificacao is None: continue
 
+        # 3. Formata o texto final
         nomes_dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
         litros_convertidos = round(pulsos / 450, 2)
-        classificacao["mensagem"] = f"{classificacao['mensagem']}: {litros_convertidos} litros em {nomes_dias[dia_semana]}, {dia:02d}/{mes:02d}/{ano} às {hora}h." 
+        
+        classificacao["mensagem"] = f"{classificacao['mensagem']}: {litros_convertidos} litros em {nomes_dias[dia_semana]}, {dia:02d}/{mes:02d}/{ano} às {hora}h."
         classificacao["timestamp"] = timestamp_str
-
 
         alertas_gerados.append(classificacao)
 
+    # Salva os alertas do ML no banco
     for alerta in alertas_gerados:
         try:
             supabase.table("alertas").insert(alerta).execute()
@@ -255,7 +281,6 @@ def analisar_leituras():
             print(f"[ERRO] Falha ao salvar alerta: {e}")
 
     return {"total_alertas": len(alertas_gerados), "alertas": alertas_gerados}
-
 
 # ---------- 7. EXECUÇÃO DIRETA ----------
 if __name__ == "__main__":
