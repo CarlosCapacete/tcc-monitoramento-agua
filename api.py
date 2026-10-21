@@ -188,11 +188,24 @@ def get_lista_dias():
 
 @app.get("/api/lista/meses")
 def get_lista_meses():
-    dados, agora = obter_dados_br()
-    meses_dict = {}
-    for d in dados:
-        meses_dict[d["dt_br"].strftime("%m/%Y")] = meses_dict.get(d["dt_br"].strftime("%m/%Y"), 0) + d["pulsos"]
+    agora = datetime.now(timezone.utc)
+    inicio_ano = agora.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    
+    # Puxa TUDO desde o início do ano
+    res = supabase.table("leituras").select("pulsos, timestamp")\
+        .gte("timestamp", inicio_ano.isoformat()).execute()
         
+    meses_dict = {}
+    for l in res.data:
+        try:
+            dt_utc = datetime.fromisoformat(l["timestamp"].replace("Z", "+00:00"))
+            dt_br = dt_utc.astimezone(FUSO_BR)
+            chave = dt_br.strftime("%m/%Y")
+            meses_dict[chave] = meses_dict.get(chave, 0) + l["pulsos"]
+        except Exception:
+            pass
+            
+    # Retorna ordenado e convertido para litros
     return {"dados": [{"mes": m, "pulsos": to_litros(p)} for m, p in sorted(meses_dict.items())]}
 
 # =====================================================

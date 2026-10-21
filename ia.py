@@ -204,14 +204,14 @@ def analisar_leituras():
   #agr pega vazao continua tbm
 
     agora = datetime.now(timezone.utc)
-    ha_10_minutos = agora - timedelta(minutes=10)
+    ha_30_minutos = agora - timedelta(minutes=30)
     
     # Puxa as leituras dos últimos 30 minutos
     res_continuo = supabase.table("leituras").select("pulsos")\
-        .gte("timestamp", ha_10_minutos.isoformat()).execute()
+        .gte("timestamp", ha_30_minutos.isoformat()).execute()
     
     # Se tivermos pelo menos 20 registros no período (para garantir que o sensor tá ligado)
-    if len(res_continuo.data) > 60: 
+    if len(res_continuo.data) > 20: 
         pulsos_continuos = [l["pulsos"] for l in res_continuo.data]
         
         # Verifica se TODAS as leituras foram maiores que zero e menores que 300
