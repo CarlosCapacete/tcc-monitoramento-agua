@@ -20,8 +20,8 @@ from db import supabase
 LIMIAR_MINIMO_ALERTA = 300
 
 # Limiares de gravidade
-LIMIAR_ALTA = 1000
-LIMIAR_CRITICA = 3000
+LIMIAR_ALTA = 400
+LIMIAR_CRITICA = 500
 
 # Cache do modelo ML (segundos) — evita retreinar a cada 5 min
 INTERVALO_RETREINO_MODELO = 3600  # 1 hora
